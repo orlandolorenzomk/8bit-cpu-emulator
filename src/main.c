@@ -3,12 +3,14 @@
 #include <stdbool.h>
 #include <time.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "ram.h"
 #include "cpu.h"
 #include "cpu_exec.h"
 #include "log.h"
 #include "assembler.h"
+#include "disassembler.h"
 
 static long long time_now_ms(void)
 {
@@ -17,15 +19,36 @@ static long long time_now_ms(void)
     return (long long)ts.tv_sec * 1000LL + ts.tv_nsec / 1000000LL;
 }
 
+static void usage(const char *prog)
+{
+    printf("Usage: %s [-d] <asm_file>\n", prog);
+    printf("  -d    disassemble only\n");
+}
+
 int main(int argc, char *argv[])
 {
-    if (argc != 2)
+    bool disasm_only = false;
+
+    if (argc < 2 || argc > 3)
     {
-        printf("Usage: %s <asm_file>\n", argv[0]);
+        usage(argv[0]);
         return 1;
     }
 
-    const char *asm_path = argv[1];
+    int arg_index = 1;
+
+    if (argc == 3)
+    {
+        if (strcmp(argv[1], "-d") != 0)
+        {
+            usage(argv[0]);
+            return 1;
+        }
+        disasm_only = true;
+        arg_index = 2;
+    }
+
+    const char *asm_path = argv[arg_index];
     const char *bin_path = "out.bin";
 
     long long start = time_now_ms();
@@ -79,6 +102,13 @@ int main(int argc, char *argv[])
             log_write(LOG_ERROR, "Failed to write program to RAM at 0x%04X", load_addr + i);
             return 1;
         }
+    }
+
+    disassemble_memory(ram.memory_cells, load_addr, load_addr + size - 1);
+
+    if (disasm_only)
+    {
+        return 0;
     }
 
     cpu.PC = org;
