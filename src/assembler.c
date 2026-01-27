@@ -1,11 +1,12 @@
 #include "assembler.h"
 #include "isa.h"
+#include "cpu.h"
+#include "log.h"
 
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
 #include <stdio.h>
-#include "cpu.h"
 
 #define MAX_LINE 256
 #define MAX_OUTPUT 65536
@@ -48,6 +49,7 @@ static size_t label_cap = 0;
 static uint8_t output_buf[MAX_OUTPUT];
 static size_t out_pos = 0;
 static uint16_t pc = 0;
+static uint16_t org_base = 0;
 
 /* ================= utilities ================= */
 
@@ -230,6 +232,7 @@ static void emit_two_register_instruction(
 
 static void emit_reg_addr_instruction(
     uint8_t opcode,
+    const char *instruction_name,
     int line_no)
 {
     char *register_token = next_token();
@@ -240,7 +243,7 @@ static void emit_reg_addr_instruction(
 
     int reg = reg_num(register_token);
     if (reg < 0)
-        fatal("Invalid register", line_no);
+        fatal_fmt("[%s] Invalid register", instruction_name, line_no);
 
     uint16_t address;
 
@@ -252,7 +255,7 @@ static void emit_reg_addr_instruction(
     {
         int label_index = find_label(address_token);
         if (label_index < 0)
-            fatal("Unknown label", line_no);
+            fatal_fmt("[%s] Unknown label", instruction_name, line_no);
 
         address = labels[label_index].addr;
     }
@@ -274,8 +277,10 @@ static void pass1(FILE *f)
         line_no++;
         char *p = trim(line);
         if (*p == '\0' || *p == ';')
+        {
+            log_write(LOG_TRACE, "Found a comment: %s", p);
             continue;
-
+        }
         char *colon = strchr(p, ':');
         if (colon)
         {
@@ -288,7 +293,8 @@ static void pass1(FILE *f)
 
         if (strncmp(p, ".org", 4) == 0)
         {
-            pc = parse_number(trim(p + 4));
+            org_base = parse_number(trim(p + 4));
+            pc = org_base;
             continue;
         }
 
@@ -306,7 +312,7 @@ static void pass1(FILE *f)
 static void pass2(FILE *f)
 {
     rewind(f);
-    pc = 0;
+    pc = org_base;
     out_pos = 0;
 
     char line[MAX_LINE];
@@ -342,7 +348,7 @@ static void pass2(FILE *f)
         {
 
         case OP_LOAD_IMM:
-            emit_reg_imm_instruction(ins->opcode, "LOAD", line_no);
+            emit_reg_imm_instruction(ins->opcode, "LOAD_IMM", line_no);
             break;
 
         case OP_ADD:
@@ -362,8 +368,11 @@ static void pass2(FILE *f)
             break;
 
         case OP_STORE:
+            emit_reg_addr_instruction(ins->opcode, "STORE", line_no);
+            break;
+
         case OP_LOAD_MEM:
-            emit_reg_addr_instruction(ins->opcode, line_no);
+            emit_reg_addr_instruction(ins->opcode, "LOAD_MEM", line_no);
             break;
 
         case OP_HALT:
@@ -380,10 +389,14 @@ static void pass2(FILE *f)
 
 /* ================= public API ================= */
 
-int assemble(FILE *input, FILE *output)
+int assemble(FILE *input, FILE *output, uint16_t *out_org)
 {
+    org_base = 0;
     pass1(input);
     pass2(input);
+
+    if (out_org)
+        *out_org = org_base;
 
     fwrite(output_buf, 1, out_pos, output);
     return (int)out_pos;

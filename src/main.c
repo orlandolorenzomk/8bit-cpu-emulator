@@ -45,7 +45,8 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    int size = assemble(in, out);
+    uint16_t org = 0;
+    int size = assemble(in, out, &org);
     fclose(in);
     fclose(out);
 
@@ -54,7 +55,7 @@ int main(int argc, char *argv[])
     Cpu cpu;
     Ram ram;
 
-    bool privileged = true;
+    bool privileged = false;
     cpu_init(&cpu, privileged);
     ram_init(&ram);
 
@@ -69,7 +70,7 @@ int main(int argc, char *argv[])
     size_t read = fread(buffer, 1, sizeof(buffer), bin);
     fclose(bin);
 
-    uint16_t load_addr = 0x2001;
+    uint16_t load_addr = org;
 
     for (size_t i = 0; i < read; i++)
     {
@@ -80,7 +81,7 @@ int main(int argc, char *argv[])
         }
     }
 
-    cpu.PC = load_addr;
+    cpu.PC = org;
     cpu.running = true;
 
     cpu_run(&cpu, &ram, true);
