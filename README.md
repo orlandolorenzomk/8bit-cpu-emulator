@@ -1,4 +1,4 @@
-# CPU Emulator
+# 8 Bit CPU Emulator
 -- Lorenzo Orlando
 
 ## Overview
